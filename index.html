@@ -213,7 +213,7 @@ footer a{color:var(--muted)}
         <div><label for="defFba">FBA配送代行手数料の仮値（円）</label><input id="defFba" class="num" type="number" inputmode="numeric"></div>
         <div><label for="defCat">カテゴリの仮値</label><select id="defCat"></select></div>
         <div><label for="extraShip">送料別の商品に足す送料（円）</label><input id="extraShip" class="num" type="number" inputmode="numeric"></div>
-        <div><label for="usePts">判定・並び順の基準</label><select id="usePts"><option value="1">ポイント込み</option><option value="0">ポイントなし（安全側）</option></select></div>
+        <div><label for="usePts">判定・並び順の基準</label><select id="usePts"><option value="0">ポイントなし（おすすめ）</option><option value="1">ポイント込み</option></select></div>
       </div>
       <h3>仕入れOK（◎）の基準</h3>
       <div class="fields">
@@ -251,7 +251,7 @@ const CATS=[ // [名前, 通常料率, 低価格料率, 低価格上限] 管理�
  ["おもちゃ＆ホビー",.10],["ホーム＆キッチン",.15],["ドラッグストア",.10,.08,1500],["ビューティー",.10,.08,1500],
  ["食品＆飲料",.10,.08,1500],["ペット用品",.15,.08,1500],["ベビー＆マタニティ",.15,.08,1500],["スポーツ＆アウトドア",.10],
  ["文房具・オフィス用品",.15],["DIY・工具",.15],["本",.15],["ミュージック・DVD",.15],["服・ファッション小物",.12,.08,3000],["その他・季節用品",.15]];
-const DEF={rApp:"",rKey:"",yApp:"",kKey:"",rVer:"20260401",plan:"small",inbound:60,storage:20,defFba:400,defCat:"その他・季節用品",extraShip:600,usePts:"1",minProfit:300,minRate:10,minRoi:15,minMonthly:3};
+const DEF={rApp:"",rKey:"",yApp:"",kKey:"",rVer:"20260401",plan:"small",inbound:60,storage:20,defFba:400,defCat:"その他・季節用品",extraShip:600,usePts:"0",minProfit:300,minRate:10,minRoi:15,minMonthly:3};
 const LS={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 let S=Object.assign({},DEF,LS.get("kr_settings",{}));
 let saved=LS.get("kr_saved",[]);
