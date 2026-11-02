@@ -87,6 +87,10 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 .big .rate{font-size:24px;font-weight:700;line-height:1}
 .big .yen{font-size:13px}
 .pos{color:var(--good)} .neg{color:var(--bad)} .na{color:var(--muted)}
+.basis{font-size:10px;color:var(--muted);font-family:var(--f-body)}
+.both{grid-column:1 / -1;display:grid;grid-template-columns:auto auto auto 1fr;gap:2px 10px;font-size:12px;font-family:var(--f-num);font-variant-numeric:tabular-nums;border-top:1px dashed var(--tag-line);padding-top:6px}
+.both span:nth-child(4n+1){font-family:var(--f-body);color:var(--muted)}
+.both span:nth-child(4n){color:var(--muted);text-align:right}
 .judge{grid-column:1 / -1;display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px}
 .j{border-radius:6px;padding:2px 8px;font-weight:700;font-size:12px}
 .j-ok{background:var(--good-soft);color:var(--good)}
@@ -209,7 +213,7 @@ footer a{color:var(--muted)}
         <div><label for="defFba">FBA配送代行手数料の仮値（円）</label><input id="defFba" class="num" type="number" inputmode="numeric"></div>
         <div><label for="defCat">カテゴリの仮値</label><select id="defCat"></select></div>
         <div><label for="extraShip">送料別の商品に足す送料（円）</label><input id="extraShip" class="num" type="number" inputmode="numeric"></div>
-        <div><label for="usePts">ポイント</label><select id="usePts"><option value="1">利益に含める</option><option value="0">含めない</option></select></div>
+        <div><label for="usePts">判定・並び順の基準</label><select id="usePts"><option value="1">ポイント込み</option><option value="0">ポイントなし（安全側）</option></select></div>
       </div>
       <h3>仕入れOK（◎）の基準</h3>
       <div class="fields">
@@ -262,6 +266,11 @@ function toast(t){const el=$("toast");el.textContent=t;el.hidden=false;clearTime
 // ---------- 利益計算（管理表 R1_価格差 と同じ式） ----------
 function catRate(cat,price){const c=CATS.find(x=>x[0]===cat)||CATS[CATS.length-1];return (c[2]!=null&&price<=c[3])?c[2]:c[1]}
 function calc(it){
+  const w=calcCore(it,true); if(!w) return null;
+  const n=calcCore(it,false);
+  return Object.assign({},S.usePts==="1"?w:n,{w,n,basisPts:S.usePts==="1"});
+}
+function calcCore(it,withPts){
   const P=it.amzPrice;
   if(!P||P<=0) return null;
   const rate=it.refPct!=null?it.refPct/100:catRate(it.cat||S.defCat,P);
@@ -270,7 +279,7 @@ function calc(it){
   const fixed=(S.plan==="small"?100:0)+Number(S.inbound)+Number(S.storage);
   const payout=P-referral-fba-fixed;
   const ship=it.freeShip?0:Number(S.extraShip);
-  const pts=S.usePts==="1"?(it.points||0):0;
+  const pts=withPts?(it.points||0):0;
   const cost=it.price+ship-pts;
   const profit=payout-cost;
   const r=profit/P, roi=cost>0?profit/cost:0;
@@ -404,7 +413,9 @@ function cardHTML(it,inSaved){
   </div>
   <div class="tag">
     <div class="flow"><small>仕入れ</small>${yen(it.price)}${it.points?`<small>−${it.points}pt</small>`:""}${it.freeShip?"":`<small>送料別</small>`}<small>→ Amazon</small>${it.amzPrice?yen(it.amzPrice):"—"}</div>
-    <div class="big">${c?`<div class="rate ${c.profit>0?"pos":"neg"}">${pct(c.r)}</div><div class="yen ${c.profit>0?"pos":"neg"}">利益 ${yen(c.profit)}</div>`:`<div class="rate na">—</div>`}</div>
+    <div class="big">${c?`<div class="rate ${c.profit>0?"pos":"neg"}">${pct(c.r)}</div><div class="yen ${c.profit>0?"pos":"neg"}">利益 ${yen(c.profit)}</div><div class="basis">${c.basisPts?"ポイント込み":"ポイントなし"}</div>`:`<div class="rate na">—</div>`}</div>
+    ${c?`<div class="both"><span>ポイント込み</span><span class="${c.w.profit>0?"pos":"neg"}">${pct(c.w.r)}</span><span class="${c.w.profit>0?"pos":"neg"}">${yen(c.w.profit)}</span><span>ROI ${pct(c.w.roi)}</span>
+      <span>ポイントなし</span><span class="${c.n.profit>0?"pos":"neg"}">${pct(c.n.r)}</span><span class="${c.n.profit>0?"pos":"neg"}">${yen(c.n.profit)}</span><span>ROI ${pct(c.n.roi)}</span></div>`:""}
     <div class="judge">${judge}${c?`<span class="na">この値段以下なら買い：${yen(c.buyLimit)}</span>`:""}</div>
   </div>
   ${extra.length?`<div class="meta">${extra.join("")}</div>`:""}
@@ -419,8 +430,10 @@ function cardHTML(it,inSaved){
     <tr><td>FBA配送代行手数料${c.fbaEst?"（仮）":""}</td><td>−${yen(c.fba)}</td></tr>
     <tr><td>成約料・納品送料・保管料</td><td>−${yen(c.fixed)}</td></tr>
     <tr><td>Amazon入金額</td><td>${yen(c.payout)}</td></tr>
-    <tr><td>実質仕入れ（送料${yen(c.ship)}・ポイント−${yen(c.pts)}）</td><td>−${yen(c.cost)}</td></tr>
-    <tr><td><b>利益</b> ／ ROI</td><td><b>${yen(c.profit)}</b> ／ ${pct(c.roi)}</td></tr></table></details>`:""}
+    <tr><td>仕入れ（送料${yen(c.ship)}込み・ポイントなし）</td><td>−${yen(c.n.cost)}</td></tr>
+    <tr><td><b>利益（ポイントなし）</b> ／ ROI</td><td><b>${yen(c.n.profit)}</b> ／ ${pct(c.n.roi)}</td></tr>
+    <tr><td>実質仕入れ（ポイント−${yen(c.w.pts)}）</td><td>−${yen(c.w.cost)}</td></tr>
+    <tr><td><b>利益（ポイント込み）</b> ／ ROI</td><td><b>${yen(c.w.profit)}</b> ／ ${pct(c.w.roi)}</td></tr></table></details>`:""}
   <div class="actions">
     <a href="${esc(it.url)}" target="_blank" rel="noopener">仕入れ先を開く</a>
     <a href="${esc(amzLink(it))}" target="_blank" rel="noopener">Amazonで見る</a>
@@ -472,8 +485,8 @@ function onCardClick(e){
 }
 ["results","savedList"].forEach(id=>{const el=$(id);el.addEventListener("change",onCardInput);el.addEventListener("click",onCardClick)});
 function tsv(){
-  const head=["調べた日","商品名","ASIN / JAN","仕入れ先","仕入れ価格","もらえるポイント","Amazon販売価格","カテゴリ","FBA配送代行手数料","月間販売数目安","出品者数","利益(目安)","利益率","URL"];
-  const rows=saved.map(it=>{const c=calc(it);return [it.date,it.name,it.asin||it.jan||"",it.src+(it.shop?"・"+it.shop:""),it.price,it.points||0,it.amzPrice||"",it.cat||(it.refPct?"Keepa料率"+it.refPct+"%":S.defCat),it.fba!=null?it.fba:"",it.monthly||"",it.sellers!=null?it.sellers:"",c?Math.round(c.profit):"",c?(c.r*100).toFixed(1)+"%":"",it.url]});
+  const head=["調べた日","商品名","ASIN / JAN","仕入れ先","仕入れ価格","もらえるポイント","Amazon販売価格","カテゴリ","FBA配送代行手数料","月間販売数目安","出品者数","利益(ポイント込み)","利益率(ポイント込み)","利益(ポイントなし)","利益率(ポイントなし)","URL"];
+  const rows=saved.map(it=>{const c=calc(it);return [it.date,it.name,it.asin||it.jan||"",it.src+(it.shop?"・"+it.shop:""),it.price,it.points||0,it.amzPrice||"",it.cat||(it.refPct?"Keepa料率"+it.refPct+"%":S.defCat),it.fba!=null?it.fba:"",it.monthly||"",it.sellers!=null?it.sellers:"",c?Math.round(c.w.profit):"",c?(c.w.r*100).toFixed(1)+"%":"",c?Math.round(c.n.profit):"",c?(c.n.r*100).toFixed(1)+"%":"",it.url]});
   return [head].concat(rows).map(r=>r.map(v=>String(v).replace(/[\t\n]/g," ")).join("\t")).join("\n");
 }
 $("copySaved").addEventListener("click",()=>{
