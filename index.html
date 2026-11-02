@@ -1,0 +1,542 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>価格差レーダー</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Dela+Gothic+One&family=Roboto+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: 片手で操作する縦1列のリスト。上に検索、下に「値札」型の結果カード。PCでは2列 */
+:root{
+  --bg:#f3f5f4; --surface:#ffffff; --ink:#18231f; --muted:#5d6b66; --line:#d9e0dd;
+  --accent:#0b6e5a; --accent-ink:#ffffff; --accent-soft:#dcefe9;
+  --good:#16794a; --good-soft:#dff3e7; --warn:#a15c00; --warn-soft:#fbefd9; --bad:#b3261e; --bad-soft:#fae3e1;
+  --tag:#fff7e0; --tag-line:#e8d39a;
+  --f-display:"Dela Gothic One","BIZ UDPGothic","Hiragino Sans",sans-serif;
+  --f-body:"BIZ UDPGothic","Hiragino Sans","Yu Gothic",Meiryo,sans-serif;
+  --f-num:"Roboto Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#111816; --surface:#19221f; --ink:#e6eeeb; --muted:#9aaba5; --line:#2c3935;
+  --accent:#4fc3a6; --accent-ink:#06231c; --accent-soft:#1d3a33;
+  --good:#5fd394; --good-soft:#163527; --warn:#f0b357; --warn-soft:#3a2c14; --bad:#ff8a80; --bad-soft:#3d1c1a;
+  --tag:#2a2617; --tag-line:#5a4f2c; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111816; --surface:#19221f; --ink:#e6eeeb; --muted:#9aaba5; --line:#2c3935;
+  --accent:#4fc3a6; --accent-ink:#06231c; --accent-soft:#1d3a33;
+  --good:#5fd394; --good-soft:#163527; --warn:#f0b357; --warn-soft:#3a2c14; --bad:#ff8a80; --bad-soft:#3d1c1a;
+  --tag:#2a2617; --tag-line:#5a4f2c; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.6}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
+.wrap{max-width:1100px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line)}
+header .wrap{display:flex;align-items:center;gap:12px;padding-block:10px;flex-wrap:wrap}
+.logo{font-family:var(--f-display);font-size:20px;letter-spacing:.02em;margin:0;white-space:nowrap}
+.logo span{color:var(--accent)}
+nav{display:flex;gap:4px;margin-left:auto}
+nav button{font:inherit;font-size:14px;border:1px solid transparent;background:none;color:var(--muted);padding:6px 12px;border-radius:999px;cursor:pointer}
+nav button[aria-current="true"]{background:var(--accent-soft);color:var(--ink);border-color:var(--accent)}
+main{padding-block:16px 48px}
+h2{font-size:17px;margin:0;text-wrap:balance}
+h3{font-size:15px;margin:0}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px}
+.stack{display:flex;flex-direction:column;gap:12px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+label{font-size:13px;color:var(--muted)}
+input,select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 10px;min-width:0}
+input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.kw{flex:1 1 220px;font-size:16px}
+.num{width:7.5em;font-family:var(--f-num);font-variant-numeric:tabular-nums}
+.btn{font:inherit;font-weight:700;border:0;border-radius:8px;padding:10px 16px;cursor:pointer;background:var(--accent);color:var(--accent-ink)}
+.btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+.btn.small{padding:6px 10px;font-size:13px}
+.btn:disabled{opacity:.5;cursor:wait}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:5px 12px;font-size:13px;cursor:pointer;color:var(--ink);background:var(--bg)}
+.chip input{margin:0;accent-color:var(--accent)}
+.fields{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.fields > div{display:flex;flex-direction:column;gap:4px;min-width:0}
+.notice{border-radius:10px;padding:10px 12px;font-size:14px;background:var(--accent-soft)}
+.notice.warn{background:var(--warn-soft)}
+.notice.bad{background:var(--bad-soft)}
+.notice b{font-weight:700}
+.summary{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--muted);align-items:baseline}
+.summary strong{font-family:var(--f-num);font-size:18px;color:var(--ink)}
+.results{display:grid;grid-template-columns:1fr;gap:12px}
+@media (min-width:820px){.results{grid-template-columns:1fr 1fr}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.card .top{display:grid;grid-template-columns:64px 1fr;gap:12px;min-width:0}
+.thumb{width:64px;height:64px;border-radius:8px;background:var(--bg);object-fit:contain;border:1px solid var(--line)}
+.name{font-size:14px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin:0;min-width:0;word-break:break-all}
+.meta{display:flex;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:4px}
+.pill{display:inline-block;border-radius:6px;padding:1px 7px;font-size:12px;font-weight:700;border:1px solid var(--line);background:var(--bg);color:var(--muted)}
+.pill.src-r{color:var(--bad);border-color:currentColor;background:transparent}
+.pill.src-y{color:var(--warn);border-color:currentColor;background:transparent}
+.pill.src-d{color:var(--muted)}
+.tag{position:relative;background:var(--tag);border:1px dashed var(--tag-line);border-radius:10px;padding:10px 12px 10px 24px;display:grid;grid-template-columns:1fr auto;gap:4px 12px;align-items:center}
+.tag::before{content:"";position:absolute;left:9px;top:50%;width:7px;height:7px;margin-top:-3.5px;border-radius:50%;background:var(--bg);border:1px solid var(--tag-line)}
+.flow{font-family:var(--f-num);font-variant-numeric:tabular-nums;font-size:14px;display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}
+.flow small{font-family:var(--f-body);color:var(--muted);font-size:11px}
+.big{text-align:right;font-family:var(--f-num);font-variant-numeric:tabular-nums}
+.big .rate{font-size:24px;font-weight:700;line-height:1}
+.big .yen{font-size:13px}
+.pos{color:var(--good)} .neg{color:var(--bad)} .na{color:var(--muted)}
+.judge{grid-column:1 / -1;display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px}
+.j{border-radius:6px;padding:2px 8px;font-weight:700;font-size:12px}
+.j-ok{background:var(--good-soft);color:var(--good)}
+.j-mid{background:var(--warn-soft);color:var(--warn)}
+.j-ng{background:var(--bad-soft);color:var(--bad)}
+.j-none{background:var(--bg);color:var(--muted);border:1px solid var(--line)}
+.manual{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end}
+.manual > div{display:flex;flex-direction:column;gap:2px}
+.manual input,.manual select{padding:6px 8px;font-size:14px}
+details summary{cursor:pointer;font-size:13px;color:var(--muted)}
+.break{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px;font-variant-numeric:tabular-nums}
+.break td{padding:3px 0;border-bottom:1px dotted var(--line)}
+.break td:last-child{text-align:right;font-family:var(--f-num)}
+.actions{display:flex;gap:6px;flex-wrap:wrap}
+.actions a,.actions button{font:inherit;font-size:13px;text-decoration:none;color:var(--accent);border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:6px 10px;cursor:pointer}
+.actions button.saved{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.warnline{font-size:12px;color:var(--warn)}
+.empty{text-align:center;color:var(--muted);padding:32px 8px}
+.steps{margin:0;padding-left:1.4em;display:flex;flex-direction:column;gap:6px;font-size:14px}
+.kv{display:grid;grid-template-columns:1fr auto;gap:2px 12px;font-size:13px;font-variant-numeric:tabular-nums}
+.kv span:nth-child(even){font-family:var(--f-num);text-align:right}
+.codebox{font-family:var(--f-num);font-size:13px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;word-break:break-all;user-select:all}
+.tablewrap{overflow-x:auto}
+footer{font-size:12px;color:var(--muted);padding-block:16px;border-top:1px solid var(--line)}
+footer a{color:var(--muted)}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 16px;border-radius:999px;font-size:14px;z-index:20}
+@media (prefers-reduced-motion:no-preference){.card{animation:in .25s ease-out both}@keyframes in{from{transform:translateY(4px)}to{transform:none}}}
+</style>
+
+<header>
+  <div class="wrap">
+    <h1 class="logo">価格差<span>レーダー</span></h1>
+    <nav aria-label="画面の切り替え">
+      <button id="tab-search" aria-current="true" data-view="search">さがす</button>
+      <button id="tab-saved" aria-current="false" data-view="saved">気になる <span id="savedCount">0</span></button>
+      <button id="tab-settings" aria-current="false" data-view="settings">設定</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- さがす -->
+  <section id="view-search" class="stack">
+    <form id="searchForm" class="panel stack" autocomplete="off">
+      <div class="row">
+        <input id="kw" class="kw" type="search" placeholder="例：DDR4 メモリ 16GB、入浴剤、ゲーミングマウス" aria-label="キーワード">
+        <button id="goBtn" class="btn" type="submit">検索</button>
+      </div>
+      <div class="row">
+        <label class="chip"><input type="checkbox" id="srcR" checked> 楽天市場</label>
+        <label class="chip"><input type="checkbox" id="srcY" checked> Yahoo!ショッピング</label>
+        <label class="chip"><input type="checkbox" id="freeShip" checked> 送料無料のみ</label>
+      </div>
+      <div class="row">
+        <label for="pmin">仕入れ値</label>
+        <input id="pmin" class="num" type="number" inputmode="numeric" placeholder="下限" min="0">
+        <span class="na">〜</span>
+        <input id="pmax" class="num" type="number" inputmode="numeric" placeholder="上限" min="0">
+        <label for="sortBy" style="margin-left:auto">並び順</label>
+        <select id="sortBy">
+          <option value="rate">利益率が高い順</option>
+          <option value="profit">利益額が多い順</option>
+          <option value="roi">ROIが高い順</option>
+          <option value="cost">仕入れ値が安い順</option>
+        </select>
+      </div>
+      <div class="row">
+        <label class="chip"><input type="checkbox" id="onlyProfit"> 利益が出る商品だけ</label>
+        <label class="chip"><input type="checkbox" id="hideNoAmz"> Amazon価格がない商品を隠す</label>
+        <button id="demoBtn" class="btn ghost small" type="button" style="margin-left:auto">サンプルで試す</button>
+      </div>
+    </form>
+    <div id="status" class="notice" role="status"></div>
+    <div id="summary" class="summary"></div>
+    <div id="results" class="results"></div>
+  </section>
+
+  <!-- 気になる -->
+  <section id="view-saved" class="stack" hidden>
+    <div class="panel stack">
+      <h2>気になるリスト</h2>
+      <p style="margin:0;font-size:14px">☆を押した商品がここに残ります（このスマホ・PCのブラウザの中だけに保存）。「コピー」を押すと表計算に貼れる形でコピーされます。</p>
+      <div class="row">
+        <button id="copySaved" class="btn small" type="button">コピー（表に貼る用）</button>
+        <button id="clearSaved" class="btn ghost small" type="button">全部消す</button>
+        <span id="clearConfirm" hidden class="row" style="gap:6px"><span class="warnline">本当に消しますか？</span><button id="clearYes" class="btn small" type="button">消す</button><button id="clearNo" class="btn ghost small" type="button">やめる</button></span>
+      </div>
+      <textarea id="copyFallback" hidden rows="5" style="width:100%;font-family:var(--f-num);font-size:12px" readonly></textarea>
+    </div>
+    <div id="savedList" class="results"></div>
+  </section>
+
+  <!-- 設定 -->
+  <section id="view-settings" class="stack" hidden>
+    <div class="panel stack">
+      <h2>APIキー（無料登録）</h2>
+      <p style="margin:0;font-size:14px">キーはこのブラウザの中だけに保存され、どこにも送られません（各サービスへの検索時を除く）。スマホとPCで別々に1回ずつ入れてください。</p>
+      <div class="fields">
+        <div><label for="rApp">楽天 アプリID（applicationId）</label><input id="rApp" placeholder="xxxxxxxx-xxxx-…"></div>
+        <div><label for="rKey">楽天 アクセスキー（accessKey）</label><input id="rKey" placeholder="pk_…"></div>
+        <div><label for="yApp">Yahoo! Client ID（appid）</label><input id="yApp" placeholder="dj00…"></div>
+        <div><label for="kKey">Keepa APIキー（有料・任意）</label><input id="kKey" placeholder="未登録なら空欄"></div>
+      </div>
+      <div>
+        <label>楽天の「許可されたWebサイト」に登録するURL</label>
+        <div id="originBox" class="codebox"></div>
+      </div>
+      <details>
+        <summary>上級者向け：楽天APIのバージョン</summary>
+        <div class="row" style="margin-top:6px"><input id="rVer" class="num" style="width:10em"><span class="na" style="font-size:12px">変更があったときだけ書き換え</span></div>
+      </details>
+    </div>
+
+    <div class="panel stack">
+      <h2>計算のルール（管理表と同じ）</h2>
+      <div class="fields">
+        <div><label for="plan">出品プラン</label><select id="plan"><option value="small">小口（1個100円）</option><option value="pro">大口（月額4,900円）</option></select></div>
+        <div><label for="inbound">FBA納品送料（円/個）</label><input id="inbound" class="num" type="number" inputmode="numeric"></div>
+        <div><label for="storage">保管料（円/個）</label><input id="storage" class="num" type="number" inputmode="numeric"></div>
+        <div><label for="defFba">FBA配送代行手数料の仮値（円）</label><input id="defFba" class="num" type="number" inputmode="numeric"></div>
+        <div><label for="defCat">カテゴリの仮値</label><select id="defCat"></select></div>
+        <div><label for="extraShip">送料別の商品に足す送料（円）</label><input id="extraShip" class="num" type="number" inputmode="numeric"></div>
+        <div><label for="usePts">ポイント</label><select id="usePts"><option value="1">利益に含める</option><option value="0">含めない</option></select></div>
+      </div>
+      <h3>仕入れOK（◎）の基準</h3>
+      <div class="fields">
+        <div><label for="minProfit">最低利益（円/個）</label><input id="minProfit" class="num" type="number" inputmode="numeric"></div>
+        <div><label for="minRate">最低利益率（%）</label><input id="minRate" class="num" type="number" inputmode="decimal"></div>
+        <div><label for="minRoi">最低ROI（%）</label><input id="minRoi" class="num" type="number" inputmode="decimal"></div>
+        <div><label for="minMonthly">最低月間販売数（個）</label><input id="minMonthly" class="num" type="number" inputmode="numeric"></div>
+      </div>
+      <div class="row"><button id="saveSettings" class="btn" type="button">保存する</button><button id="resetSettings" class="btn ghost small" type="button">初期値に戻す</button></div>
+    </div>
+
+    <div class="panel stack">
+      <h2>販売手数料の目安（カテゴリ別）</h2>
+      <div class="tablewrap"><table class="break" id="catTable"></table></div>
+      <p class="na" style="margin:0;font-size:12px">最低30円。低価格の上限以下なら低価格時の料率。Keepaを使うと商品ごとの正確な料率に自動で置きかわります。</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    計算は目安です。仕入れ前に必ずAmazonセラーアプリで「出品制限」と「手数料見積もり」を確認してください。<br>
+    <a href="https://webservice.rakuten.co.jp/" target="_blank" rel="noopener">Supported by Rakuten Developers</a> ／
+    <a href="https://developer.yahoo.co.jp/sitemap/" target="_blank" rel="noopener">Webサービス by Yahoo! JAPAN</a> ／ Amazon価格データ：Keepa（連携時）
+  </div>
+</footer>
+<div id="toast" class="toast" hidden></div>
+
+<script>
+(function(){
+"use strict";
+// ---------- 設定 ----------
+const CATS=[ // [名前, 通常料率, 低価格料率, 低価格上限] 管理表「設定」シートと同じ
+ ["PC・周辺機器",.08],["TVゲーム（ソフト等）",.15],["ゲーム機本体",.08],["家電",.08],["カメラ",.08],
+ ["おもちゃ＆ホビー",.10],["ホーム＆キッチン",.15],["ドラッグストア",.10,.08,1500],["ビューティー",.10,.08,1500],
+ ["食品＆飲料",.10,.08,1500],["ペット用品",.15,.08,1500],["ベビー＆マタニティ",.15,.08,1500],["スポーツ＆アウトドア",.10],
+ ["文房具・オフィス用品",.15],["DIY・工具",.15],["本",.15],["ミュージック・DVD",.15],["服・ファッション小物",.12,.08,3000],["その他・季節用品",.15]];
+const DEF={rApp:"",rKey:"",yApp:"",kKey:"",rVer:"20260401",plan:"small",inbound:60,storage:20,defFba:400,defCat:"その他・季節用品",extraShip:600,usePts:"1",minProfit:300,minRate:10,minRoi:15,minMonthly:3};
+const LS={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+let S=Object.assign({},DEF,LS.get("kr_settings",{}));
+let saved=LS.get("kr_saved",[]);
+let items=[]; // 現在の検索結果
+let isDemo=false;
+const $=id=>document.getElementById(id);
+const yen=n=>(n==null||isNaN(n))?"—":(n<0?"-":"")+"¥"+Math.abs(Math.round(n)).toLocaleString("ja-JP");
+const pct=n=>(n==null||!isFinite(n))?"—":(n*100).toFixed(1)+"%";
+const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function toast(t){const el=$("toast");el.textContent=t;el.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>el.hidden=true,1800)}
+
+// ---------- 利益計算（管理表 R1_価格差 と同じ式） ----------
+function catRate(cat,price){const c=CATS.find(x=>x[0]===cat)||CATS[CATS.length-1];return (c[2]!=null&&price<=c[3])?c[2]:c[1]}
+function calc(it){
+  const P=it.amzPrice;
+  if(!P||P<=0) return null;
+  const rate=it.refPct!=null?it.refPct/100:catRate(it.cat||S.defCat,P);
+  const referral=Math.max(30,Math.round(P*rate));
+  const fba=it.fba!=null?it.fba:Number(S.defFba);
+  const fixed=(S.plan==="small"?100:0)+Number(S.inbound)+Number(S.storage);
+  const payout=P-referral-fba-fixed;
+  const ship=it.freeShip?0:Number(S.extraShip);
+  const pts=S.usePts==="1"?(it.points||0):0;
+  const cost=it.price+ship-pts;
+  const profit=payout-cost;
+  const r=profit/P, roi=cost>0?profit/cost:0;
+  const okP=profit>=S.minProfit, okR=r>=S.minRate/100, okI=roi>=S.minRoi/100;
+  let judge;
+  if(okP&&okR&&okI){ judge=(it.monthly==null)?["mid","○ 条件OK（売れ行きは要確認）"]:(it.monthly>=S.minMonthly?["ok","◎ 仕入れ候補"]:["mid","△ 売れ行きが弱い"]); }
+  else judge=profit>0?["mid","△ 要検討"]:["ng","× 見送り"];
+  // この値段以下なら買い（支払額ベース）
+  const lim=Math.floor(Math.min(payout-S.minProfit,payout/(1+S.minRoi/100),payout-(S.minRate/100)*P))+pts-ship;
+  return {P,rate,referral,fba,fbaEst:it.fba==null,fixed,payout,ship,pts,cost,profit,r,roi,judge,buyLimit:Math.max(0,lim)};
+}
+
+// ---------- JAN ----------
+function validEan(s){if(!/^\d{13}$/.test(s))return false;let t=0;for(let i=0;i<12;i++)t+=(+s[i])*(i%2?3:1);return (10-t%10)%10===+s[12]}
+function findJan(obj){const txt=JSON.stringify(obj);for(const m of txt.matchAll(/(?:^|\D)(4[59]\d{11})(?=\D|$)/g)){if(validEan(m[1]))return m[1]}return null}
+
+// ---------- API ----------
+async function getJSON(url,label){
+  let res;
+  try{res=await fetch(url,{referrerPolicy:"strict-origin-when-cross-origin"})}
+  catch(e){throw new Error(label+"に接続できませんでした。この画面がClaudeのプレビュー内だと外部につながりません。GitHub Pagesに置いたURLから開いてください。")}
+  let data=null;try{data=await res.json()}catch(e){}
+  if(!res.ok){
+    const msg=data?(data.error_description||data.errorMessage||(data.errors&&JSON.stringify(data.errors))||data.error||JSON.stringify(data).slice(0,160)):res.status;
+    let hint="";
+    if(res.status===403&&/REFERRER|REFERER/i.test(String(msg))) hint="（楽天の管理画面の「許可されたWebサイト」に、設定画面に出ているURLを登録してください）";
+    if(res.status===429) hint="（短時間に検索しすぎです。1分ほど待ってください）";
+    if(res.status===401||res.status===400) hint="（キーが正しいか設定画面で確認してください）";
+    throw new Error(label+"：エラー "+res.status+" "+msg+hint);
+  }
+  return data;
+}
+async function searchRakuten(kw,o){
+  const p=new URLSearchParams({applicationId:S.rApp,accessKey:S.rKey,keyword:kw,format:"json",formatVersion:"2",hits:"30",availability:"1"});
+  if(o.min)p.set("minPrice",o.min); if(o.max)p.set("maxPrice",o.max); if(o.free)p.set("postageFlag","1");
+  const d=await getJSON("https://openapi.rakuten.co.jp/ichibams/api/IchibaItem/Search/"+encodeURIComponent(S.rVer)+"?"+p,"楽天");
+  const arr=(d.items||d.Items||[]).map(x=>x.Item||x);
+  return arr.map(x=>{
+    const img=(x.mediumImageUrls||[])[0]; const imgUrl=typeof img==="string"?img:(img&&img.imageUrl)||"";
+    const price=+x.itemPrice;
+    return {src:"楽天",cls:"src-r",name:x.itemName,price,url:x.itemUrl,shop:x.shopName,img:imgUrl,
+      points:Math.floor(price*(+x.pointRate||1)/100),pointNote:"ポイント"+(x.pointRate||1)+"倍",freeShip:+x.postageFlag===0,jan:findJan(x)};
+  });
+}
+async function searchYahoo(kw,o){
+  const p=new URLSearchParams({appid:S.yApp,query:kw,results:"30",in_stock:"true"});
+  if(o.min)p.set("price_from",o.min); if(o.max)p.set("price_to",o.max); if(o.free)p.set("shipping","free");
+  const d=await getJSON("https://shopping.yahooapis.jp/ShoppingWebService/V3/itemSearch?"+p,"Yahoo!");
+  return (d.hits||[]).map(x=>{
+    const jan=x.janCode&&validEan(x.janCode)?x.janCode:findJan({n:x.name,d:x.description});
+    const pts=(x.point&&(+x.point.amount||0))+(+x.lyLimitedBonusAmount||0);
+    return {src:"Yahoo!",cls:"src-y",name:x.name,price:+x.price,url:x.url,shop:x.seller&&x.seller.name,img:x.image&&x.image.medium,
+      points:pts||0,pointNote:pts?"PayPay等":"",freeShip:x.shipping?(+x.shipping.code===2):false,jan};
+  });
+}
+async function keepaLookup(jans){
+  const out={}; let tokensLeft=null;
+  for(let i=0;i<jans.length;i+=100){
+    const p=new URLSearchParams({key:S.kKey,domain:"5",code:jans.slice(i,i+100).join(","),stats:"90",history:"0"});
+    const d=await getJSON("https://api.keepa.com/product?"+p,"Keepa");
+    tokensLeft=d.tokensLeft;
+    (d.products||[]).forEach(pr=>{
+      const st=pr.stats||{}; const cur=st.current||[];
+      const pick=[st.buyBoxPrice,cur[1],cur[0]].find(v=>v!=null&&v>0);
+      const info={asin:pr.asin,title:pr.title,amzPrice:pick||null,amazonSelf:cur[0]>0,rank:cur[3]>0?cur[3]:null,sellers:cur[11]>=0?cur[11]:null,
+        monthly:pr.monthlySold>0?pr.monthlySold:null,fba:pr.fbaFees&&pr.fbaFees.pickAndPackFee>0?pr.fbaFees.pickAndPackFee:null,
+        refPct:pr.referralFeePercentage>0?pr.referralFeePercentage:null};
+      (pr.eanList||[]).forEach(e=>{out[e]=out[e]||info});
+    });
+  }
+  return {map:out,tokensLeft};
+}
+
+// ---------- 検索 ----------
+async function runSearch(e){
+  e&&e.preventDefault();
+  const kw=$("kw").value.trim();
+  if(!kw){setStatus("キーワードを入れてください。","warn");return}
+  const useR=$("srcR").checked&&S.rApp&&S.rKey, useY=$("srcY").checked&&S.yApp;
+  if(!useR&&!useY){setStatus("<b>APIキーが未登録です。</b>「設定」で楽天かYahoo!のキーを入れると検索できます。それまでは「サンプルで試す」で使い方を確認できます。","warn");return}
+  const o={min:$("pmin").value,max:$("pmax").value,free:$("freeShip").checked};
+  $("goBtn").disabled=true; setStatus("検索中…"); isDemo=false;
+  const errs=[]; let list=[];
+  const jobs=[]; if(useR)jobs.push(searchRakuten(kw,o)); if(useY)jobs.push(searchYahoo(kw,o));
+  (await Promise.allSettled(jobs)).forEach(r=>r.status==="fulfilled"?list=list.concat(r.value):errs.push(r.reason.message));
+  // 同じJANは一番安いものを残す
+  const byJan={}; const rest=[];
+  list.forEach(it=>{it.id=Math.random().toString(36).slice(2);it.date=new Date().toISOString().slice(0,10);
+    if(it.jan){const eff=it.price-(it.points||0);if(!byJan[it.jan]||eff<byJan[it.jan].price-(byJan[it.jan].points||0)){if(byJan[it.jan])it.others=(byJan[it.jan].others||0)+1;byJan[it.jan]=it}else byJan[it.jan].others=(byJan[it.jan].others||0)+1}
+    else rest.push(it)});
+  list=Object.values(byJan).concat(rest);
+  let kmsg="";
+  if(S.kKey&&Object.keys(byJan).length){
+    try{const k=await keepaLookup(Object.keys(byJan));
+      list.forEach(it=>{const m=it.jan&&k.map[it.jan];if(m)Object.assign(it,m,{matched:"keepa"})});
+      kmsg="Keepa残りトークン："+k.tokensLeft;
+    }catch(err){errs.push(err.message)}
+  }
+  items=list; $("goBtn").disabled=false;
+  const matched=list.filter(x=>x.matched).length;
+  let msg=`<b>${list.length}件</b>見つかりました（JANあり ${Object.keys(byJan).length}件`+(S.kKey?`・Amazon価格を自動取得 ${matched}件`:"")+`）。`;
+  if(!S.kKey)msg+=" Amazon価格は各カードの「Amazonで見る」で確認して入力すると、利益が計算されて並び替わります。";
+  if(kmsg)msg+=" "+kmsg;
+  if(errs.length)msg+="<br>"+errs.map(esc).join("<br>");
+  setStatus(msg,errs.length?"bad":"");
+  render();
+}
+function setStatus(html,kind){const el=$("status");el.innerHTML=html;el.className="notice"+(kind?" "+kind:"");el.hidden=!html}
+
+// ---------- 表示 ----------
+function amzLink(it){return it.asin?"https://www.amazon.co.jp/dp/"+it.asin:"https://www.amazon.co.jp/s?k="+encodeURIComponent(it.jan||it.name.replace(/【.*?】|\[.*?\]/g,"").slice(0,40))}
+function catOptions(sel){return CATS.map(c=>`<option${c[0]===sel?" selected":""}>${esc(c[0])}</option>`).join("")}
+function cardHTML(it,inSaved){
+  const c=calc(it);
+  const isSaved=saved.some(s=>s.id===it.id);
+  const judge=c?`<span class="j j-${c.judge[0]}">${c.judge[1]}</span>`:`<span class="j j-none">Amazon価格を入れると判定</span>`;
+  const extra=[];
+  if(it.amazonSelf)extra.push(`<span class="warnline">Amazon本体が販売中（カートを取りにくい）</span>`);
+  if(c&&c.fbaEst)extra.push(`<span class="na">FBA手数料は仮値</span>`);
+  if(it.monthly)extra.push(`<span class="na">月${it.monthly}個以上売れている</span>`);
+  if(it.rank)extra.push(`<span class="na">ランキング ${Number(it.rank).toLocaleString()}位</span>`);
+  if(it.sellers!=null)extra.push(`<span class="na">出品者 ${it.sellers}人</span>`);
+  return `<article class="card" data-id="${it.id}">
+  <div class="top">
+    ${it.img?`<img class="thumb" src="${esc(it.img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">`:`<div class="thumb"></div>`}
+    <div style="min-width:0">
+      <p class="name">${esc(it.name)}</p>
+      <div class="meta"><span class="pill ${it.cls}">${esc(it.src)}</span>${it.shop?`<span>${esc(it.shop)}</span>`:""}
+      ${it.jan?`<span class="pill">JAN ${it.jan}</span>`:`<span class="pill">JANなし・型番で照合を</span>`}${it.others?`<span>他${it.others}店</span>`:""}</div>
+    </div>
+  </div>
+  <div class="tag">
+    <div class="flow"><small>仕入れ</small>${yen(it.price)}${it.points?`<small>−${it.points}pt</small>`:""}${it.freeShip?"":`<small>送料別</small>`}<small>→ Amazon</small>${it.amzPrice?yen(it.amzPrice):"—"}</div>
+    <div class="big">${c?`<div class="rate ${c.profit>0?"pos":"neg"}">${pct(c.r)}</div><div class="yen ${c.profit>0?"pos":"neg"}">利益 ${yen(c.profit)}</div>`:`<div class="rate na">—</div>`}</div>
+    <div class="judge">${judge}${c?`<span class="na">この値段以下なら買い：${yen(c.buyLimit)}</span>`:""}</div>
+  </div>
+  ${extra.length?`<div class="meta">${extra.join("")}</div>`:""}
+  ${(!it.matched||inSaved)?`<div class="manual">
+     <div><label for="ap-${it.id}">Amazon販売価格</label><input id="ap-${it.id}" class="num" type="number" inputmode="numeric" data-f="amzPrice" value="${it.amzPrice||""}" placeholder="例 2280"></div>
+     <div><label for="fb-${it.id}">FBA手数料</label><input id="fb-${it.id}" class="num" type="number" inputmode="numeric" data-f="fba" value="${it.fba!=null?it.fba:""}" placeholder="${S.defFba}"></div>
+     ${it.refPct==null?`<div><label for="ct-${it.id}">カテゴリ</label><select id="ct-${it.id}" data-f="cat">${catOptions(it.cat||S.defCat)}</select></div>`:""}
+   </div>`:""}
+  ${c?`<details><summary>計算の内訳</summary><table class="break">
+    <tr><td>Amazon販売価格</td><td>${yen(c.P)}</td></tr>
+    <tr><td>販売手数料（${(c.rate*100).toFixed(1)}%）</td><td>−${yen(c.referral)}</td></tr>
+    <tr><td>FBA配送代行手数料${c.fbaEst?"（仮）":""}</td><td>−${yen(c.fba)}</td></tr>
+    <tr><td>成約料・納品送料・保管料</td><td>−${yen(c.fixed)}</td></tr>
+    <tr><td>Amazon入金額</td><td>${yen(c.payout)}</td></tr>
+    <tr><td>実質仕入れ（送料${yen(c.ship)}・ポイント−${yen(c.pts)}）</td><td>−${yen(c.cost)}</td></tr>
+    <tr><td><b>利益</b> ／ ROI</td><td><b>${yen(c.profit)}</b> ／ ${pct(c.roi)}</td></tr></table></details>`:""}
+  <div class="actions">
+    <a href="${esc(it.url)}" target="_blank" rel="noopener">仕入れ先を開く</a>
+    <a href="${esc(amzLink(it))}" target="_blank" rel="noopener">Amazonで見る</a>
+    ${it.asin?`<a href="https://keepa.com/#!product/5-${esc(it.asin)}" target="_blank" rel="noopener">Keepa</a>`:""}
+    ${inSaved?`<button type="button" data-act="del">リストから外す</button>`:`<button type="button" data-act="save" class="${isSaved?"saved":""}">${isSaved?"★ 保存済み":"☆ 気になる"}</button>`}
+  </div>
+</article>`;
+}
+function sortList(list){
+  const k=$("sortBy").value; const v=it=>{const c=calc(it);if(k==="cost")return -it.price;if(!c)return -Infinity;return k==="rate"?c.r:k==="profit"?c.profit:c.roi};
+  return list.slice().sort((a,b)=>v(b)-v(a));
+}
+function render(){
+  let list=items;
+  if($("hideNoAmz").checked)list=list.filter(it=>it.amzPrice);
+  if($("onlyProfit").checked)list=list.filter(it=>{const c=calc(it);return c&&c.profit>0});
+  list=sortList(list);
+  const cs=items.map(calc).filter(Boolean);
+  const ok=cs.filter(c=>c.judge[0]==="ok").length;
+  const best=cs.length?Math.max(...cs.map(c=>c.r)):null;
+  $("summary").innerHTML=items.length?`<span>表示 <strong>${list.length}</strong> 件</span><span>計算済み <strong>${cs.length}</strong></span><span>◎ 仕入れ候補 <strong>${ok}</strong></span><span>最高の利益率 <strong>${pct(best)}</strong></span>${isDemo?'<span class="pill">サンプルデータ</span>':""}`:"";
+  $("results").innerHTML=list.length?list.map(it=>cardHTML(it,false)).join(""):(items.length?`<div class="empty">条件に合う商品がありません。絞り込みを外してみてください。</div>`:"");
+}
+function renderSaved(){
+  $("savedCount").textContent=saved.length;
+  $("savedList").innerHTML=saved.length?sortList(saved).map(it=>cardHTML(it,true)).join(""):`<div class="empty">まだありません。検索結果の「☆ 気になる」を押すとここに入ります。</div>`;
+}
+
+// ---------- 操作 ----------
+function onCardInput(e){
+  const f=e.target.dataset.f; if(!f)return;
+  const card=e.target.closest(".card"); const id=card.dataset.id;
+  const inSaved=e.currentTarget.id==="savedList";
+  const pool=inSaved?saved:items; const it=pool.find(x=>x.id===id); if(!it)return;
+  const v=e.target.value;
+  if(f==="cat")it.cat=v; else it[f]=v===""?null:Number(v);
+  if(inSaved)LS.set("kr_saved",saved);
+  const s=saved.find(x=>x.id===id); if(s&&!inSaved){Object.assign(s,it);LS.set("kr_saved",saved)}
+  inSaved?renderSaved():render();
+}
+function onCardClick(e){
+  const b=e.target.closest("button[data-act]"); if(!b)return;
+  const id=b.closest(".card").dataset.id;
+  if(b.dataset.act==="save"){
+    const i=saved.findIndex(s=>s.id===id);
+    if(i>=0){saved.splice(i,1);toast("リストから外しました")}else{saved.push(Object.assign({},items.find(x=>x.id===id)));toast("気になるリストに入れました")}
+    LS.set("kr_saved",saved); render(); $("savedCount").textContent=saved.length;
+  }else if(b.dataset.act==="del"){saved=saved.filter(s=>s.id!==id);LS.set("kr_saved",saved);renderSaved()}
+}
+["results","savedList"].forEach(id=>{const el=$(id);el.addEventListener("change",onCardInput);el.addEventListener("click",onCardClick)});
+function tsv(){
+  const head=["調べた日","商品名","ASIN / JAN","仕入れ先","仕入れ価格","もらえるポイント","Amazon販売価格","カテゴリ","FBA配送代行手数料","月間販売数目安","出品者数","利益(目安)","利益率","URL"];
+  const rows=saved.map(it=>{const c=calc(it);return [it.date,it.name,it.asin||it.jan||"",it.src+(it.shop?"・"+it.shop:""),it.price,it.points||0,it.amzPrice||"",it.cat||(it.refPct?"Keepa料率"+it.refPct+"%":S.defCat),it.fba!=null?it.fba:"",it.monthly||"",it.sellers!=null?it.sellers:"",c?Math.round(c.profit):"",c?(c.r*100).toFixed(1)+"%":"",it.url]});
+  return [head].concat(rows).map(r=>r.map(v=>String(v).replace(/[\t\n]/g," ")).join("\t")).join("\n");
+}
+$("copySaved").addEventListener("click",()=>{
+  if(!saved.length){toast("リストが空です");return}
+  const t=tsv();
+  const fb=()=>{const ta=$("copyFallback");ta.value=t;ta.hidden=false;ta.select();toast("下の枠を長押し（右クリック）してコピーしてください")};
+  try{navigator.clipboard.writeText(t).then(()=>toast("コピーしました。表計算ソフトに貼り付けてください"),fb)}catch(e){fb()}
+});
+$("clearSaved").addEventListener("click",()=>{$("clearConfirm").hidden=false});
+$("clearNo").addEventListener("click",()=>{$("clearConfirm").hidden=true});
+$("clearYes").addEventListener("click",()=>{saved=[];LS.set("kr_saved",saved);$("clearConfirm").hidden=true;renderSaved();toast("全部消しました")});
+
+// タブ
+document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>show(b.dataset.view)));
+function show(v){
+  ["search","saved","settings"].forEach(n=>{$("view-"+n).hidden=n!==v;$("tab-"+n).setAttribute("aria-current",n===v)});
+  if(v==="saved")renderSaved(); if(v==="settings")fillSettings();
+  try{history.replaceState(null,"",v==="search"?location.pathname+location.search:"#"+(v==="settings"?"setup":v))}catch(e){}
+  window.scrollTo(0,0);
+}
+// 設定
+const FIELDS=["rApp","rKey","yApp","kKey","rVer","plan","inbound","storage","defFba","defCat","extraShip","usePts","minProfit","minRate","minRoi","minMonthly"];
+function fillSettings(){
+  $("defCat").innerHTML=catOptions(S.defCat);
+  FIELDS.forEach(f=>{$(f).value=S[f]});
+  $("originBox").textContent=location.protocol.startsWith("http")?location.origin+"/":"（GitHub Pagesに置いたあとに表示されます）";
+}
+$("saveSettings").addEventListener("click",()=>{
+  FIELDS.forEach(f=>{const el=$(f);S[f]=el.type==="number"?Number(el.value||0):el.value.trim()});
+  LS.set("kr_settings",S); toast("保存しました"); render();
+});
+$("resetSettings").addEventListener("click",()=>{const keep={rApp:S.rApp,rKey:S.rKey,yApp:S.yApp,kKey:S.kKey};S=Object.assign({},DEF,keep);LS.set("kr_settings",S);fillSettings();toast("計算ルールを初期値に戻しました（キーはそのまま）")});
+$("catTable").innerHTML="<tr><td>カテゴリ</td><td>料率</td></tr>"+CATS.map(c=>`<tr><td>${esc(c[0])}</td><td>${(c[1]*100).toFixed(0)}%${c[2]!=null?`（${c[3].toLocaleString()}円以下は${(c[2]*100).toFixed(0)}%）`:""}</td></tr>`).join("");
+
+["sortBy","onlyProfit","hideNoAmz"].forEach(id=>$(id).addEventListener("change",render));
+$("searchForm").addEventListener("submit",runSearch);
+
+// ---------- サンプル（架空のデータ） ----------
+function demo(){
+  isDemo=true;
+  const d=new Date().toISOString().slice(0,10);
+  const mk=(o)=>Object.assign({id:Math.random().toString(36).slice(2),date:d,url:"https://www.rakuten.co.jp/",img:""},o);
+  items=[
+    mk({src:"楽天",cls:"src-r",name:"（サンプル）DDR4 デスクトップ用メモリ 16GB×2枚 3200MHz",price:7980,points:399,freeShip:true,shop:"サンプルPCショップ",jan:"4900000000017",matched:"keepa",asin:null,amzPrice:10480,fba:434,refPct:8,monthly:20,rank:2150,sellers:6}),
+    mk({src:"Yahoo!",cls:"src-y",name:"（サンプル）入浴剤 30錠入り 炭酸タブレット",price:1180,points:59,freeShip:true,shop:"サンプルドラッグ",jan:"4900000000024",matched:"keepa",amzPrice:2280,fba:318,refPct:10,monthly:50,rank:880,sellers:4}),
+    mk({src:"楽天",cls:"src-r",name:"（サンプル）ワイヤレス ゲーミングマウス 軽量モデル",price:6480,points:648,freeShip:true,shop:"サンプル家電館",jan:"4900000000031",matched:"keepa",amzPrice:7980,fba:434,refPct:8,monthly:10,rank:5400,sellers:12,amazonSelf:true}),
+    mk({src:"楽天",cls:"src-r",name:"（サンプル）クリスマス オーナメント 12個セット",price:1500,points:15,freeShip:false,shop:"サンプル雑貨店",jan:"4900000000048",matched:"keepa",amzPrice:2980,fba:400,refPct:15,monthly:null,rank:12000,sellers:3}),
+    mk({src:"Yahoo!",cls:"src-y",name:"（サンプル）NVMe SSD 1TB PCIe4.0",price:9800,points:98,freeShip:true,shop:"サンプルパーツ",jan:"4900000000055",matched:"keepa",amzPrice:10200,fba:350,refPct:8,monthly:100,rank:300,sellers:25}),
+    mk({src:"楽天",cls:"src-r",name:"（サンプル）ゲーム用 コントローラー充電スタンド（JANなし）",price:1980,points:99,freeShip:true,shop:"サンプルゲーム",jan:null})
+  ];
+  $("kw").value="（サンプル）";
+  setStatus("<b>サンプル（架空の商品）を表示しています。</b>利益率が高い順に並んでいます。いちばん下の「JANなし」の商品は、Amazon価格を入れると計算されて順位が変わります。","");
+  render();
+}
+$("demoBtn").addEventListener("click",demo);
+
+// 起動
+$("savedCount").textContent=saved.length;
+fillSettings();
+const h=location.hash.slice(1); if(h==="saved")show("saved"); else if(h==="setup")show("settings");
+if(!S.rApp&&!S.yApp)demo(); else setStatus("キーワードを入れて「検索」を押してください。"+(S.kKey?"Keepa連携：オン":"Keepa連携：オフ（Amazon価格は手入力）"),"");
+})();
+</script>
+
+</body>
+</html>
