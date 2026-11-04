@@ -164,6 +164,15 @@ footer a{color:var(--muted)}
 
       <div id="paneJ" class="stack" hidden>
         <label for="janList">1行に1商品。JANだけ、または「JAN Amazon価格」（例：4901234567894 2980）</label>
+        <div class="row">
+          <button id="scanBtn" class="btn small" type="button">📷 カメラでバーコードを読む</button>
+          <label class="btn ghost small" for="scanFile" style="cursor:pointer">写真から読む</label>
+          <input id="scanFile" type="file" accept="image/*" capture="environment" hidden>
+        </div>
+        <div id="scanBox" class="stack" hidden>
+          <div id="reader" style="width:100%;max-width:420px;border-radius:10px;overflow:hidden;background:#000"></div>
+          <div class="row"><span id="scanMsg" class="hint">バーコードを枠の中に横向きで写してください</span><button id="scanStop" class="btn ghost small" type="button" style="margin-left:auto">読み取りを終える</button></div>
+        </div>
         <textarea id="janList" rows="5" placeholder="4901234567894 2980&#10;4549980490518"></textarea>
         <p class="hint">Amazon価格を書かなかった商品は、結果のカードで入力できます（Keepaのキーがあれば自動で取ります）。</p>
       </div>
@@ -578,7 +587,7 @@ $("clearYes").addEventListener("click",()=>{saved=[];LS.set("kr2_saved",saved);$
 function setMode(m){mode=m;$("modeK").setAttribute("aria-pressed",m==="K");$("modeJ").setAttribute("aria-pressed",m==="J");$("paneK").hidden=m!=="K";$("paneJ").hidden=m!=="J"}
 $("modeK").addEventListener("click",()=>setMode("K"));$("modeJ").addEventListener("click",()=>setMode("J"));
 $("stopBtn").addEventListener("click",()=>{stopFlag=true;progress("止めています…")});
-$("searchForm").addEventListener("submit",run);
+$("searchForm").addEventListener("submit",e=>{stopScan();run(e)});
 ["sortBy","onlyGap"].forEach(id=>$(id).addEventListener("change",render));
 document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>show(b.dataset.view)));
 function show(v){
@@ -621,6 +630,46 @@ function demo(){
   render();
 }
 $("demoBtn").addEventListener("click",demo);
+// ---------- バーコード読み取り ----------
+let scanner=null, lastCode="", lastAt=0;
+function loadScanLib(){
+  if(window.__Html5QrcodeLibrary__)return Promise.resolve(window.__Html5QrcodeLibrary__);
+  return new Promise((ok,ng)=>{const sc=document.createElement("script");sc.src="vendor/html5-qrcode.min.js";
+    sc.onload=()=>window.__Html5QrcodeLibrary__?ok(window.__Html5QrcodeLibrary__):ng();sc.onerror=ng;document.head.appendChild(sc)});
+}
+function addJan(code){
+  if(!validEan(code)){$("scanMsg").textContent="読めましたがJANではないようです："+code;return false}
+  const ta=$("janList"); const lines=ta.value.split(/\n/).map(x=>x.trim()).filter(Boolean);
+  if(lines.some(l=>l.startsWith(code))){$("scanMsg").textContent="読み取り済み："+code;return false}
+  lines.push(code); ta.value=lines.join("\n");
+  try{navigator.vibrate&&navigator.vibrate(80)}catch(e){}
+  $("scanMsg").textContent="✓ 追加しました："+code+"（合計"+lines.length+"件）。続けて読めます";
+  return true;
+}
+const libFail=()=>toast("この画面ではカメラを使えません。公開URL（github.io）から開いてください");
+$("scanBtn").addEventListener("click",async()=>{
+  let L;try{L=await loadScanLib()}catch(e){libFail();return}
+  $("scanBox").hidden=false;$("scanMsg").textContent="カメラを起動中…（許可を求められたら「許可」）";
+  try{
+    scanner=scanner||new L.Html5Qrcode("reader",{formatsToSupport:[L.Html5QrcodeSupportedFormats.EAN_13],verbose:false});
+    await scanner.start({facingMode:"environment"},{fps:10,qrbox:(w,h)=>({width:Math.min(300,w*0.9)|0,height:Math.min(140,h*0.5)|0})},
+      txt=>{const now=Date.now();if(txt===lastCode&&now-lastAt<2500)return;lastCode=txt;lastAt=now;addJan(txt)},()=>{});
+    $("scanMsg").textContent="バーコードを枠の中に横向きで写してください";
+  }catch(e){$("scanMsg").textContent="カメラを使えませんでした。ブラウザの設定でカメラを許可するか、「写真から読む」を使ってください。";}
+});
+async function stopScan(){try{if(scanner&&scanner.isScanning)await scanner.stop()}catch(e){} $("scanBox").hidden=true;}
+$("scanStop").addEventListener("click",stopScan);
+$("scanFile").addEventListener("change",async e=>{
+  const f=e.target.files&&e.target.files[0];if(!f)return;
+  let L;try{L=await loadScanLib()}catch(err){libFail();return}
+  $("scanBox").hidden=false;
+  try{if(scanner&&scanner.isScanning)await scanner.stop();
+    scanner=scanner||new L.Html5Qrcode("reader",{formatsToSupport:[L.Html5QrcodeSupportedFormats.EAN_13],verbose:false});
+    const txt=await scanner.scanFile(f,false);addJan(txt)}
+  catch(err){$("scanMsg").textContent="写真からバーコードを読めませんでした。明るい所で、バーコードを大きく写して撮り直してください。"}
+  e.target.value="";
+});
+
 
 // 起動
 $("savedCount").textContent=saved.length; fillSettings();
