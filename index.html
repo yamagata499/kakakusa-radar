@@ -1,8 +1,9 @@
 <!doctype html>
-<html lang="ja">
+<html lang="ja" translate="no">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="google" content="notranslate">
 <style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
 </head>
 <body>
@@ -235,17 +236,18 @@ footer a{color:var(--muted)}
       <div><label>楽天の「許可されたWebサイト」に登録するURL</label><div id="originBox" class="codebox"></div></div>
       <details id="relayBox"><summary><b>中継の準備（Yahoo!を使うのに1回だけ必要）</b></summary>
         <div class="stack" style="margin-top:8px;font-size:14px">
+          <p class="warnline" style="font-size:13px"><b>先にブラウザの自動翻訳を切ってください。</b>翻訳が入るとコードが日本語に変わって動かなくなります（Edgeならアドレスバーの「文A」マーク→「元の言語で表示」）。</p>
           <p>Yahoo!はブラウザから直接の問い合わせを受け付けないため、自分のGoogleアカウントに無料の「中継役」を1つ置きます。PCでの作業がおすすめです（10分ほど）。</p>
           <ol style="margin:0;padding-left:1.3em;display:flex;flex-direction:column;gap:4px">
             <li><a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">Google Apps Script</a> を開く（Googleにログイン）</li>
-            <li>最初から書いてある文字を全部消し、下の「コードをコピー」で写したものを貼り付けて保存（💾）</li>
+            <li>最初から書いてある文字を全部消し、下の「コードをコピー」ボタンで写したものを貼り付けて保存（💾）。貼った後、英語のままか確認（「もし」「パラメータ」などの日本語が混ざっていたら翻訳が入っています）</li>
             <li>右上の「デプロイ」→「新しいデプロイ」→ 左の⚙で「ウェブアプリ」を選ぶ</li>
             <li>「次のユーザーとして実行」＝<b>自分</b>、「アクセスできるユーザー」＝<b>全員</b> にして「デプロイ」</li>
             <li>「アクセスを承認」→ 自分のアカウント → 警告が出たら「詳細」→「（安全ではないページ）に移動」→「許可」</li>
             <li>表示された「ウェブアプリのURL」（/exec で終わる）をコピーして、下の欄に貼り付けて「保存する」</li>
           </ol>
           <button id="copyRelay" class="btn small" type="button" style="align-self:flex-start">コードをコピー</button>
-          <textarea id="relayCode" rows="6" readonly style="font-size:11px"></textarea>
+          <textarea id="relayCode" class="notranslate" translate="no" rows="6" readonly style="font-size:11px"></textarea>
           <div><label for="relay">中継URL（https://script.google.com/macros/s/…/exec）</label><input id="relay" style="width:100%" placeholder="未設定"></div>
           <p class="hint">この中継は、Yahoo!・楽天・Keepaへの問い合わせだけを取り次ぎます。中継に入れたキーやデータはあなたのGoogleアカウントの中だけで処理されます。</p>
         </div>
@@ -593,7 +595,7 @@ function fillSettings(){
 }
 $("saveSettings").addEventListener("click",()=>{FIELDS.forEach(f=>{const el=$(f);S[f]=el.type==="number"?Number(el.value||0):el.value.trim()});LS.set("kr2_settings",S);toast("保存しました");render()});
 $("resetSettings").addEventListener("click",()=>{const keep={kKey:S.kKey,rApp:S.rApp,rKey:S.rKey,yApp:S.yApp};S=Object.assign({},DEF,keep);LS.set("kr2_settings",S);fillSettings();toast("条件を初期値に戻しました（キーはそのまま）")});
-const RELAY_CODE="// 価格差レーダー 中継スクリプト（Yahoo!・楽天・Keepaへの問い合わせだけを取り次ぎます）\nvar ALLOW = {\"shopping.yahooapis.jp\": true, \"openapi.rakuten.co.jp\": true, \"api.keepa.com\": true};\nfunction doGet(e) {\n  var url = (e && e.parameter && e.parameter.u) || \"\";\n  var m = url.match(/^https:\\/\\/([^\\/?#]+)\\//);\n  if (!m || !ALLOW[m[1]]) return out({relayError: \"許可されていない宛先です\"});\n  var headers = {};\n  if (m[1] === \"openapi.rakuten.co.jp\") headers[\"Referer\"] = \"https://yamagata499.github.io/\";\n  var res = UrlFetchApp.fetch(url, {muteHttpExceptions: true, headers: headers});\n  var text = res.getContentText(), body;\n  try { body = JSON.parse(text); } catch (err) { body = {raw: text.slice(0, 300)}; }\n  return out({status: res.getResponseCode(), body: body});\n}\nfunction out(o) {\n  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);\n}\n";
+const RELAY_CODE="// kakakusa-radar relay (forwards only to Yahoo!, Rakuten, Keepa)\nvar ALLOW = {\"shopping.yahooapis.jp\": true, \"openapi.rakuten.co.jp\": true, \"api.keepa.com\": true};\nfunction doGet(e) {\n  var url = (e && e.parameter && e.parameter.u) || \"\";\n  var m = url.match(/^https:\\/\\/([^\\/?#]+)\\//);\n  if (!m || !ALLOW[m[1]]) return out({relayError: \"host not allowed\"});\n  var headers = {};\n  if (m[1] === \"openapi.rakuten.co.jp\") headers[\"Referer\"] = \"https://yamagata499.github.io/\";\n  var res = UrlFetchApp.fetch(url, {muteHttpExceptions: true, headers: headers});\n  var text = res.getContentText(), body;\n  try { body = JSON.parse(text); } catch (err) { body = {raw: text.slice(0, 300)}; }\n  return out({status: res.getResponseCode(), body: body});\n}\nfunction out(o) {\n  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);\n}\n";
 $("relayCode").value=RELAY_CODE;
 $("copyRelay").addEventListener("click",()=>{const ta=$("relayCode");try{navigator.clipboard.writeText(RELAY_CODE).then(()=>toast("コピーしました"),()=>{ta.select();toast("枠を長押ししてコピーしてください")})}catch(e){ta.select();toast("枠を長押ししてコピーしてください")}});
 $("siteFilter").value=S.siteFilter||"good";
