@@ -294,10 +294,10 @@ const CATS=[["PC・周辺機器",.08],["TVゲーム（ソフト等）",.15],["�
  ["おもちゃ＆ホビー",.10],["ホーム＆キッチン",.15],["ドラッグストア",.10,.08,1500],["ビューティー",.10,.08,1500],
  ["食品＆飲料",.10,.08,1500],["ペット用品",.15,.08,1500],["ベビー＆マタニティ",.15,.08,1500],["スポーツ＆アウトドア",.10],
  ["文房具・オフィス用品",.15],["DIY・工具",.15],["本",.15],["ミュージック・DVD",.15],["服・ファッション小物",.12,.08,3000],["その他・季節用品",.15]];
-const DEF={kKey:"",rApp:"",rKey:"",yApp:"",rVer:"20260401",minGap:15,minProfit:300,minRoi:15,plan:"small",inbound:60,storage:20,defFba:400,defCat:"その他・季節用品",extraShip:600,siteFilter:"good",relay:""};
+const DEF={kKey:"",rApp:"",rKey:"",yApp:"",rVer:"20260401",minGap:15,minProfit:300,minRoi:15,plan:"small",inbound:60,storage:20,defFba:400,defCat:"その他・季節用品",extraShip:600,siteFilter:"good",relay:"https://script.google.com/macros/s/AKfycbwWu1hXB75zHiqS6s6Ilf_kCCwqpTXQTnngss51GOuSymoApmfngW4RbKQp97GCNv2v/exec"};
 const NG=/中古|ジャンク|訳あり|わけあり|アウトレット|展示品|リファービッシュ|整備済|再生品|開封品|難あり|USED/i;
 const LS={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
-let S=Object.assign({},DEF,LS.get("kr2_settings",{}));
+let S=Object.assign({},DEF,LS.get("kr2_settings",{}));if(!S.relay)S.relay=DEF.relay;
 let saved=LS.get("kr2_saved",[]);
 let items=[], isDemo=false, mode="K", stopFlag=false;
 const $=id=>document.getElementById(id);
