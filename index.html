@@ -233,6 +233,23 @@ footer a{color:var(--muted)}
         <div><label for="yApp">Yahoo! Client ID</label><input id="yApp" placeholder="dj00…"></div>
       </div>
       <div><label>楽天の「許可されたWebサイト」に登録するURL</label><div id="originBox" class="codebox"></div></div>
+      <details id="relayBox"><summary><b>中継の準備（Yahoo!を使うのに1回だけ必要）</b></summary>
+        <div class="stack" style="margin-top:8px;font-size:14px">
+          <p>Yahoo!はブラウザから直接の問い合わせを受け付けないため、自分のGoogleアカウントに無料の「中継役」を1つ置きます。PCでの作業がおすすめです（10分ほど）。</p>
+          <ol style="margin:0;padding-left:1.3em;display:flex;flex-direction:column;gap:4px">
+            <li><a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">Google Apps Script</a> を開く（Googleにログイン）</li>
+            <li>最初から書いてある文字を全部消し、下の「コードをコピー」で写したものを貼り付けて保存（💾）</li>
+            <li>右上の「デプロイ」→「新しいデプロイ」→ 左の⚙で「ウェブアプリ」を選ぶ</li>
+            <li>「次のユーザーとして実行」＝<b>自分</b>、「アクセスできるユーザー」＝<b>全員</b> にして「デプロイ」</li>
+            <li>「アクセスを承認」→ 自分のアカウント → 警告が出たら「詳細」→「（安全ではないページ）に移動」→「許可」</li>
+            <li>表示された「ウェブアプリのURL」（/exec で終わる）をコピーして、下の欄に貼り付けて「保存する」</li>
+          </ol>
+          <button id="copyRelay" class="btn small" type="button" style="align-self:flex-start">コードをコピー</button>
+          <textarea id="relayCode" rows="6" readonly style="font-size:11px"></textarea>
+          <div><label for="relay">中継URL（https://script.google.com/macros/s/…/exec）</label><input id="relay" style="width:100%" placeholder="未設定"></div>
+          <p class="hint">この中継は、Yahoo!・楽天・Keepaへの問い合わせだけを取り次ぎます。中継に入れたキーやデータはあなたのGoogleアカウントの中だけで処理されます。</p>
+        </div>
+      </details>
       <details><summary>上級者向け：楽天APIのバージョン</summary><div class="row" style="margin-top:6px"><input id="rVer" class="num" style="width:10em"><span class="hint">変更があったときだけ書き換え</span></div></details>
     </div>
 
@@ -275,7 +292,7 @@ const CATS=[["PC・周辺機器",.08],["TVゲーム（ソフト等）",.15],["�
  ["おもちゃ＆ホビー",.10],["ホーム＆キッチン",.15],["ドラッグストア",.10,.08,1500],["ビューティー",.10,.08,1500],
  ["食品＆飲料",.10,.08,1500],["ペット用品",.15,.08,1500],["ベビー＆マタニティ",.15,.08,1500],["スポーツ＆アウトドア",.10],
  ["文房具・オフィス用品",.15],["DIY・工具",.15],["本",.15],["ミュージック・DVD",.15],["服・ファッション小物",.12,.08,3000],["その他・季節用品",.15]];
-const DEF={kKey:"",rApp:"",rKey:"",yApp:"",rVer:"20260401",minGap:15,minProfit:300,minRoi:15,plan:"small",inbound:60,storage:20,defFba:400,defCat:"その他・季節用品",extraShip:600,siteFilter:"good"};
+const DEF={kKey:"",rApp:"",rKey:"",yApp:"",rVer:"20260401",minGap:15,minProfit:300,minRoi:15,plan:"small",inbound:60,storage:20,defFba:400,defCat:"その他・季節用品",extraShip:600,siteFilter:"good",relay:""};
 const NG=/中古|ジャンク|訳あり|わけあり|アウトレット|展示品|リファービッシュ|整備済|再生品|開封品|難あり|USED/i;
 const LS={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 let S=Object.assign({},DEF,LS.get("kr2_settings",{}));
@@ -315,20 +332,39 @@ function calc(it){
 }
 
 // ---------- 通信 ----------
+function apiFail(status,data,label){
+  const err=new Error("");err.status=status;err.data=data;
+  const msg=data?(data.error_description||data.errorMessage||(data.Error&&data.Error.Message)||(data.error&&(data.error.message||data.error))||(data.errors&&JSON.stringify(data.errors))||data.raw||""):"";
+  let hint="";
+  if(status===403&&/REFER/i.test(String(msg)))hint="（楽天の「許可されたWebサイト」に設定画面のURLを登録してください）";
+  if(status===401||status===400||status===403)hint=hint||"（キーが正しいか設定画面で確認してください）";
+  if(status===402)hint="（Keepaの契約が有効か確認してください）";
+  err.message=label+"：エラー "+status+" "+(typeof msg==="string"?msg:JSON.stringify(msg)).slice(0,140)+hint; return err;
+}
+async function viaRelay(url,label){
+  let res;
+  try{res=await fetch(S.relay+(S.relay.includes("?")?"&":"?")+"u="+encodeURIComponent(url))}
+  catch(e){throw new Error(label+"：中継（Googleスクリプト）に接続できませんでした。設定の中継URLと、デプロイ時の「アクセスできるユーザー：全員」を確認してください。")}
+  let j=null;try{j=await res.json()}catch(e){throw new Error(label+"：中継から読めない返事が来ました。中継URLが「/exec」で終わっているか確認してください。")}
+  if(j.relayError)throw new Error(label+"：中継 "+j.relayError);
+  if(j.status<200||j.status>=300)throw apiFail(j.status,j.body,label);
+  return j.body;
+}
 async function getJSON(url,label,opt){
+  const host=new URL(url).host;
+  if(S.relay&&RELAY_FIRST.test(host))return viaRelay(url,label);
   let res;
   try{res=await fetch(url,Object.assign({referrerPolicy:"strict-origin-when-cross-origin"},opt||{}))}
-  catch(e){throw new Error(label+"に接続できませんでした（このページがClaudeの画面内だと外部につながりません。公開URLから開いてください）")}
+  catch(e){
+    if(S.relay)return viaRelay(url,label);
+    if(!/^https?:$/.test(location.protocol)||/claude|anthropic/.test(location.host))throw new Error(label+"に接続できませんでした（Claudeの画面内では外部につながりません。公開URLから開いてください）");
+    throw new Error(label+"はブラウザからの直接接続を受け付けていません。「設定」の「中継の準備」を1回やると使えるようになります。");
+  }
   let data=null;try{data=await res.json()}catch(e){}
-  if(!res.ok){const err=new Error("");err.status=res.status;err.data=data;
-    const msg=data?(data.error_description||data.errorMessage||(data.error&&(data.error.message||data.error))||(data.errors&&JSON.stringify(data.errors))||""):"";
-    let hint="";
-    if(res.status===403&&/REFER/i.test(String(msg)))hint="（楽天の「許可されたWebサイト」に設定画面のURLを登録してください）";
-    if(res.status===401||res.status===400)hint="（キーが正しいか設定画面で確認してください）";
-    if(res.status===402)hint="（Keepaの契約が有効か確認してください）";
-    err.message=label+"：エラー "+res.status+" "+String(msg).slice(0,140)+hint; throw err;}
+  if(!res.ok)throw apiFail(res.status,data,label);
   return data;
 }
+const RELAY_FIRST=/shopping\.yahooapis\.jp$/;
 async function keepa(path,params){
   for(let i=0;i<8;i++){
     if(stopFlag)throw new Error("止めました");
@@ -549,7 +585,7 @@ function show(v){
   try{history.replaceState(null,"",v==="search"?location.pathname+location.search:"#"+(v==="settings"?"setup":v))}catch(e){}
   window.scrollTo(0,0);
 }
-const FIELDS=["kKey","rApp","rKey","yApp","rVer","minGap","minProfit","minRoi","plan","inbound","storage","defFba","defCat","extraShip"];
+const FIELDS=["relay","kKey","rApp","rKey","yApp","rVer","minGap","minProfit","minRoi","plan","inbound","storage","defFba","defCat","extraShip"];
 function fillSettings(){
   $("defCat").innerHTML=catOptions(S.defCat);
   FIELDS.forEach(f=>{$(f).value=S[f]});
@@ -557,6 +593,9 @@ function fillSettings(){
 }
 $("saveSettings").addEventListener("click",()=>{FIELDS.forEach(f=>{const el=$(f);S[f]=el.type==="number"?Number(el.value||0):el.value.trim()});LS.set("kr2_settings",S);toast("保存しました");render()});
 $("resetSettings").addEventListener("click",()=>{const keep={kKey:S.kKey,rApp:S.rApp,rKey:S.rKey,yApp:S.yApp};S=Object.assign({},DEF,keep);LS.set("kr2_settings",S);fillSettings();toast("条件を初期値に戻しました（キーはそのまま）")});
+const RELAY_CODE="// 価格差レーダー 中継スクリプト（Yahoo!・楽天・Keepaへの問い合わせだけを取り次ぎます）\nvar ALLOW = {\"shopping.yahooapis.jp\": true, \"openapi.rakuten.co.jp\": true, \"api.keepa.com\": true};\nfunction doGet(e) {\n  var url = (e && e.parameter && e.parameter.u) || \"\";\n  var m = url.match(/^https:\\/\\/([^\\/?#]+)\\//);\n  if (!m || !ALLOW[m[1]]) return out({relayError: \"許可されていない宛先です\"});\n  var headers = {};\n  if (m[1] === \"openapi.rakuten.co.jp\") headers[\"Referer\"] = \"https://yamagata499.github.io/\";\n  var res = UrlFetchApp.fetch(url, {muteHttpExceptions: true, headers: headers});\n  var text = res.getContentText(), body;\n  try { body = JSON.parse(text); } catch (err) { body = {raw: text.slice(0, 300)}; }\n  return out({status: res.getResponseCode(), body: body});\n}\nfunction out(o) {\n  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);\n}\n";
+$("relayCode").value=RELAY_CODE;
+$("copyRelay").addEventListener("click",()=>{const ta=$("relayCode");try{navigator.clipboard.writeText(RELAY_CODE).then(()=>toast("コピーしました"),()=>{ta.select();toast("枠を長押ししてコピーしてください")})}catch(e){ta.select();toast("枠を長押ししてコピーしてください")}});
 $("siteFilter").value=S.siteFilter||"good";
 $("siteFilter").addEventListener("change",()=>{S.siteFilter=$("siteFilter").value;LS.set("kr2_settings",S);renderSites()});
 $("siteCat").innerHTML='<option value="">すべて</option>'+[...new Set(SITES.map(s=>s[1]))].map(c=>`<option>${esc(c)}</option>`).join("");
@@ -584,7 +623,7 @@ $("demoBtn").addEventListener("click",demo);
 // 起動
 $("savedCount").textContent=saved.length; fillSettings();
 if(!S.kKey)setMode("J");
-const h=location.hash.slice(1); if(h==="saved")show("saved"); else if(h==="setup")show("settings"); else if(h==="sites")show("sites");
+const h=location.hash.slice(1); if(h==="saved")show("saved"); else if(h==="setup")show("settings"); else if(h==="relay"){show("settings");$("relayBox").open=true;} else if(h==="sites")show("sites");
 if(!S.rApp&&!S.yApp)demo(); else setStatus(S.kKey?"条件を確認して「リサーチ開始」を押してください。":"Keepaのキーがないので「JANを貼り付け」モードで使えます。","");
 })();
 </script>
